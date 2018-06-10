@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import os
-import subprocess
+import shutil
 from argparse import ArgumentParser
 from glob import glob
 from toil.job import Job
@@ -13,9 +13,19 @@ from subprocess import check_call
 def concatenate_job(job, input_ids):
     output = os.path.join(job.fileStore.getLocalTempDir(), 'rm.out')
     input_paths = map(job.fileStore.readGlobalFile, input_ids)
-    cat = subprocess.Popen("xargs -0 cat >> {output}".format(output=output),
-                           stdin=subprocess.PIPE, shell=True)
-    cat.communicate("\0".join(input_paths))
+    with open(output, 'w') as outfile:
+        # Write headers
+        outfile.write("""   SW   perc perc perc  query                    position in query     matching       repeat              position in repeat
+score   div. del. ins.  sequence                 begin end    (left)   repeat         class/family      begin  end    (left)   ID
+
+""")
+        for input_path in input_paths:
+            with open(input_path) as f:
+                # Remove headers in each split file
+                f.readline()
+                f.readline()
+                f.readline()
+                shutil.copyfileobj(f, outfile)
     return job.fileStore.writeGlobalFile(output)
 
 def repeat_masking_job(job, input_fasta, lift_id, species):

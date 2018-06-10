@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import time
 import os
 import subprocess
 from argparse import ArgumentParser
@@ -59,9 +58,25 @@ def split_fasta_job(job, input_fasta, opts):
     repeat_masked = [job.addChildJobFn(repeat_masking_job, id, lift_id, opts.species).rv() for id in split_fasta_ids]
     return job.addFollowOnJobFn(concatenate_job, repeat_masked).rv()
 
+def convert_to_fasta(job, type, input_file, opts):
+    local_file = job.fileStore.readGlobalFile(input_file)
+    if type == "gzip":
+        with open(local_file) as gzipped, job.fileStore.writeGlobalFileStream() as (uncompressed, uncompressed_fileID):
+            check_call(["gzip", "-d", "-c"], stdin=gzipped, stdout=uncompressed)
+    else:
+        raise RuntimeError("unknown compressed file type")
+    return job.addChildJobFn(split_fasta_job, uncompressed_fileID, opts).rv()
+
+def makeURL(path):
+    if not (path.startswith("file:") or path.startswith("s3:") or path.startswith("http:") \
+            or path.startswith("https:")):
+        return "file://" + os.path.abspath(path)
+    else:
+        return path
+
 def parse_args():
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument('input_fasta')
+    parser.add_argument('input_sequence', help="FASTA or gzipped-FASTA file")
     parser.add_argument('species')
     parser.add_argument('split_size', type=int, default=200000)
     parser.add_argument('output')
@@ -74,10 +89,13 @@ def main():
         if opts.restart:
             result_id = toil.restart()
         else:
-            input_fasta_id = toil.importFile('file://' + os.path.abspath(opts.input_fasta))
-            job = Job.wrapJobFn(split_fasta_job, input_fasta_id, opts)
+            input_sequence_id = toil.importFile(makeURL(opts.input_sequence))
+            if opts.input_sequence.endswith(".gz"):
+                job = Job.wrapJobFn(convert_to_fasta, "gzip", input_sequence_id, opts)
+            else:
+                job = Job.wrapJobFn(split_fasta_job, input_sequence_id, opts)
             result_id = toil.start(job)
-        toil.exportFile(result_id, 'file://' + os.path.abspath(opts.output))
+        toil.exportFile(result_id, makeURL(opts.output))
 
 if __name__ == '__main__':
     main()

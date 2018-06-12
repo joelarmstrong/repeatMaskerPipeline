@@ -5,12 +5,22 @@ from argparse import ArgumentParser
 from glob import glob
 from toil.job import Job
 from toil.common import Toil
+from toil.lib.docker import apiDockerCall
 from subprocess import check_call
+
+def run_command(job, command, work_dir, opts):
+    if opts.no_docker:
+        check_call(command)
+    else:
+        # Relativize paths
+        new_command = [param.replace(work_dir, '/data') for param in command]
+        apiDockerCall(job, opts.docker_image, new_command, working_dir='/data',
+                      volumes={work_dir: {'bind': '/data', 'mode': 'rw'}})
 
 # There are 3 phases to the process: splitting the input, running
 # repeatmasker, and concatenation of the repeat-masked pieces.
 
-def concatenate_job(job, input_ids):
+def concatenate_job(job, input_ids, opts):
     output = os.path.join(job.fileStore.getLocalTempDir(), 'rm.out')
     input_paths = map(job.fileStore.readGlobalFile, input_ids)
     with open(output, 'w') as outfile:
@@ -28,45 +38,48 @@ score   div. del. ins.  sequence                 begin end    (left)   repeat   
                 shutil.copyfileobj(f, outfile)
     return job.fileStore.writeGlobalFile(output)
 
-def repeat_masking_job(job, input_fasta, lift_id, species):
+def repeat_masking_job(job, input_fasta, lift_id, species, opts):
     temp_dir = job.fileStore.getLocalTempDir()
     os.chdir(temp_dir)
     local_fasta = os.path.join(temp_dir, 'input.fa')
     job.fileStore.readGlobalFile(input_fasta, local_fasta, cache=False)
-    lift_file = job.fileStore.readGlobalFile(lift_id)
+    lift_file = os.path.join(temp_dir, 'lift')
+    job.fileStore.readGlobalFile(lift_id, lift_file)
     check_call(["chmod", "a+rw", local_fasta])
-    check_call(["RepeatMasker", "-species", species, local_fasta])
+    run_command(job, ["RepeatMasker", "-species", species, local_fasta], temp_dir, opts)
     output_path = local_fasta + '.out'
     lifted_path = os.path.join(temp_dir, 'lifted.out')
-    check_call(["liftUp", "-type=.out", lifted_path, lift_file, "error", output_path])
+    run_command(job, ["liftUp", "-type=.out", lifted_path, lift_file, "error", output_path], temp_dir, opts)
     masked_out = job.fileStore.writeGlobalFile(lifted_path)
     return masked_out
 
-def split_fasta(input_fasta, split_size, work_dir):
+def split_fasta(job, input_fasta, split_size, work_dir, opts):
     lift_file = os.path.join(work_dir, "lift")
     # Chunk any large sequences in the input into "split_size"-sized
     # chunks, keeping a constant 1kb overlap between chunks. All the
     # chunks get deposited into one file.
     chunks_file = os.path.join(work_dir, "chunks")
-    check_call(["faSplit", "size", "-oneFile", "-extra=1000", "-lift=" + lift_file, input_fasta,
-                str(split_size), chunks_file])
+    run_command(job, ["faSplit", "size", "-oneFile", "-extra=1000", "-lift=" + lift_file, input_fasta,
+                      str(split_size), chunks_file],
+                work_dir, opts)
     # Now that there are no large sequences left in the file, we split
     # it by sequence into multiple files, each with about "split_size"
     # bases in them. (This is useful because it avoids creating
     # millions of jobs to process the long tail of very small
     # contigs.)
-    check_call(["faSplit", "about", chunks_file + '.fa', str(split_size), os.path.join(work_dir, "out")])
+    run_command(job, ["faSplit", "about", chunks_file + '.fa', str(split_size), os.path.join(work_dir, "out")],
+                work_dir, opts)
     return lift_file, glob(os.path.join(work_dir, "out*"))
 
 def split_fasta_job(job, input_fasta, opts):
     work_dir = job.fileStore.getLocalTempDir()
     local_fasta = os.path.join(work_dir, 'in.fa')
     job.fileStore.readGlobalFile(input_fasta, local_fasta)
-    lift_file, split_fastas = split_fasta(local_fasta, opts.split_size, work_dir)
+    lift_file, split_fastas = split_fasta(job, local_fasta, opts.split_size, work_dir, opts)
     split_fasta_ids = [job.fileStore.writeGlobalFile(f) for f in split_fastas]
     lift_id = job.fileStore.writeGlobalFile(lift_file)
-    repeat_masked = [job.addChildJobFn(repeat_masking_job, id, lift_id, opts.species).rv() for id in split_fasta_ids]
-    return job.addFollowOnJobFn(concatenate_job, repeat_masked).rv()
+    repeat_masked = [job.addChildJobFn(repeat_masking_job, id, lift_id, opts.species, opts).rv() for id in split_fasta_ids]
+    return job.addFollowOnJobFn(concatenate_job, repeat_masked, opts).rv()
 
 def convert_to_fasta(job, type, input_file, opts):
     local_file = job.fileStore.readGlobalFile(input_file)
@@ -88,8 +101,10 @@ def parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('input_sequence', help="FASTA or gzipped-FASTA file")
     parser.add_argument('species')
-    parser.add_argument('split_size', type=int, default=200000)
     parser.add_argument('output')
+    parser.add_argument('--split_size', type=int, default=200000)
+    parser.add_argument('--no-docker', action='store_true')
+    parser.add_argument('--docker-image', default='quay.io/joelarmstrong/repeatmasker')
     Job.Runner.addToilOptions(parser)
     return parser.parse_args()
 

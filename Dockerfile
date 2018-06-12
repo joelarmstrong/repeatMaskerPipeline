@@ -20,6 +20,12 @@ RUN make install || echo "ignoring expected error"
 # TRF
 RUN ["wget", "https://tandem.bu.edu/trf/downloads/trf409.linux64", "-o", "/bin/trf"]
 RUN ["chmod", "+x", "/bin/trf"]
+# Kent utils
+RUN ["apt-get", "install", "-y", "libkrb5-3"]
+RUN ["wget", "http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/faSplit", "-O", "/bin/faSplit"]
+RUN ["chmod", "+x", "/bin/faSplit"]
+RUN ["wget", "http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/liftUp", "-O", "/bin/liftUp"]
+RUN ["chmod", "+x", "/bin/liftUp"]
 # Copy any libraries from the user
 COPY Libraries/* /RepeatMasker/Libraries/
 # Copy any engines from the user
@@ -28,3 +34,4 @@ COPY engines/* /usr/local/bin/
 COPY RepeatMaskerConfig.pm /RepeatMasker/
 WORKDIR /RepeatMasker
 RUN ["sh", "-c", "echo '\n\n\n/bin/trf\n2\n/usr/local/rmblast\n\n5\n' | perl ./configure"]
+ENV PATH="/RepeatMasker:${PATH}"

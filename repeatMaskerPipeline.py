@@ -46,7 +46,7 @@ def repeat_masking_job(job, input_fasta, lift_id, species, opts):
     lift_file = os.path.join(temp_dir, 'lift')
     job.fileStore.readGlobalFile(lift_id, lift_file)
     check_call(["chmod", "a+rw", local_fasta])
-    run_command(job, ["RepeatMasker", "-species", species, local_fasta], temp_dir, opts)
+    run_command(job, ["RepeatMasker", "-species", species, "-engine", opts.engine, local_fasta], temp_dir, opts)
     output_path = local_fasta + '.out'
     lifted_path = os.path.join(temp_dir, 'lifted.out')
     run_command(job, ["liftUp", "-type=.out", lifted_path, lift_file, "error", output_path], temp_dir, opts)
@@ -102,6 +102,7 @@ def parse_args():
     parser.add_argument('input_sequence', help="FASTA or gzipped-FASTA file")
     parser.add_argument('species')
     parser.add_argument('output')
+    parser.add_argument('--engine', default='ncbi')
     parser.add_argument('--split_size', type=int, default=200000)
     parser.add_argument('--no-docker', action='store_true')
     parser.add_argument('--docker-image', default='quay.io/joelarmstrong/repeatmasker')

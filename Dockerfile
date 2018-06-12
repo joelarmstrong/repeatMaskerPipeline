@@ -1,9 +1,11 @@
 FROM debian:stretch
 RUN ["apt-get", "update"]
-RUN ["apt-get", "install", "-y", "perl", "wget", "patch", "build-essential", "cpio"]
+RUN ["apt-get", "install", "-y", "perl", "wget", "patch", "build-essential", "cpio", "cpanminus"]
 # RepeatMasker
 RUN ["wget", "http://www.repeatmasker.org/RepeatMasker-open-4-0-7.tar.gz"]
 RUN ["tar", "xzvf", "RepeatMasker-open-4-0-7.tar.gz"]
+## Install an RM dependency
+RUN ["cpanm", "Text::Soundex"]
 # RMBlast
 RUN ["wget", "ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.6.0/ncbi-blast-2.6.0+-src.tar.gz"]
 RUN ["wget", "http://www.repeatmasker.org/isb-2.6.0+-changes-vers2.patch.gz"]
@@ -20,6 +22,8 @@ RUN ["wget", "https://tandem.bu.edu/trf/downloads/trf409.linux64", "-o", "/bin/t
 RUN ["chmod", "+x", "/bin/trf"]
 # Copy any libraries from the user
 COPY Libraries/* /RepeatMasker/Libraries/
+# Copy any engines from the user
+COPY engines/* /usr/local/bin/
 # Configuration
 COPY RepeatMaskerConfig.pm /RepeatMasker/
 WORKDIR /RepeatMasker

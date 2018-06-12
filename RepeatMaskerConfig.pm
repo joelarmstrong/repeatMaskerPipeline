@@ -84,7 +84,7 @@ BEGIN {
   ## ========================
   ## Set the location of the HMMER programs and support utilities.
   ##
-    $HMMER_DIR   = "/usr/local/hmmer";
+    $HMMER_DIR   = "/usr/local/bin";
     $NHMMSCAN_PRGM = "$HMMER_DIR/nhmmscan";
     $HMMPRESS_PRGM = "$HMMER_DIR/hmmpress";
 
@@ -103,7 +103,7 @@ BEGIN {
   ## ========================
   ## Set the location of the WUBLAST/ABBlast programs and support utilities.
   ##
-    $WUBLAST_DIR   = "/usr/local/abblast";
+    $WUBLAST_DIR   = "/usr/local/bin";
     $WUBLASTN_PRGM = "$WUBLAST_DIR/blastn";
     $WUBLASTP_PRGM = "$WUBLAST_DIR/blastp";
     $WUBLASTX_PRGM = "$WUBLAST_DIR/blastx";

@@ -14,4 +14,8 @@ RUN patch -p1 < ../isb-2.6.0+-changes-vers2.patch
 WORKDIR c++
 RUN ["./configure", "--with-mt", "--prefix=/usr/local/rmblast", "--without-debug"]
 RUN ["make"]
-RUN make install || echo "ignoring expected error"
+RUN make install || echo "ignoring expected error"# Copy any libraries from the user
+COPY Libraries/* /RepeatMasker/Libraries/
+# Configuration
+COPY RepeatMaskerConfig.pm /RepeatMasker/
+WORKDIR /RepeatMasker

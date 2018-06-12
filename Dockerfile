@@ -14,8 +14,13 @@ RUN patch -p1 < ../isb-2.6.0+-changes-vers2.patch
 WORKDIR c++
 RUN ["./configure", "--with-mt", "--prefix=/usr/local/rmblast", "--without-debug"]
 RUN ["make"]
-RUN make install || echo "ignoring expected error"# Copy any libraries from the user
+RUN make install || echo "ignoring expected error"
+# TRF
+RUN ["wget", "https://tandem.bu.edu/trf/downloads/trf409.linux64", "-o", "/bin/trf"]
+RUN ["chmod", "+x", "/bin/trf"]
+# Copy any libraries from the user
 COPY Libraries/* /RepeatMasker/Libraries/
 # Configuration
 COPY RepeatMaskerConfig.pm /RepeatMasker/
 WORKDIR /RepeatMasker
+RUN ["sh", "-c", "echo '\n\n\n/bin/trf\n2\n/usr/local/rmblast\n\n5\n' | perl ./configure"]

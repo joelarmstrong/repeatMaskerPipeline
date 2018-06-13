@@ -17,10 +17,21 @@ def run_command(job, command, work_dir, opts):
         apiDockerCall(job, opts.docker_image, new_command, working_dir='/data',
                       volumes={work_dir: {'bind': '/data', 'mode': 'rw'}})
 
-# There are 3 phases to the process: splitting the input, running
-# repeatmasker, and concatenation of the repeat-masked pieces.
+def mask_fasta_job(job, fasta_id, outfile_id, opts):
+    temp_dir = job.fileStore.getLocalTempDir()
+    input_fasta = os.path.join(temp_dir, 'in.fa')
+    job.fileStore.readGlobalFile(fasta_id, input_fasta)
+    out_file = os.path.join(temp_dir, 'in.fa.out')
+    job.fileStore.readGlobalFile(outfile_id, out_file)
+    unmasked_two_bit = os.path.join(temp_dir, 'in.2bit')
+    run_command(job, ["faToTwoBit", input_fasta, unmasked_two_bit], temp_dir, opts)
+    masked_two_bit = os.path.join(temp_dir, 'out.2bit')
+    run_command(job, ["twoBitMask", "-type=.out", unmasked_two_bit, out_file, masked_two_bit], temp_dir, opts)
+    masked_fasta = os.path.join(temp_dir, 'out.fa')
+    run_command(job, ["twoBitToFa", masked_two_bit, masked_fasta], temp_dir, opts)
+    return job.fileStore.writeGlobalFile(masked_fasta)
 
-def concatenate_job(job, input_ids, opts):
+def concatenate_job(job, fasta_id, input_ids, opts):
     output = os.path.join(job.fileStore.getLocalTempDir(), 'rm.out')
     input_paths = map(job.fileStore.readGlobalFile, input_ids)
     with open(output, 'w') as outfile:
@@ -36,7 +47,9 @@ score   div. del. ins.  sequence                 begin end    (left)   repeat   
                 f.readline()
                 f.readline()
                 shutil.copyfileobj(f, outfile)
-    return job.fileStore.writeGlobalFile(output)
+    outfile_id = job.fileStore.writeGlobalFile(output)
+    masked_fasta_id = job.addChildJobFn(mask_fasta_job, fasta_id, outfile_id, opts).rv()
+    return outfile_id, masked_fasta_id
 
 def repeat_masking_job(job, input_fasta, lift_id, species, opts):
     temp_dir = job.fileStore.getLocalTempDir()
@@ -79,7 +92,7 @@ def split_fasta_job(job, input_fasta, opts):
     split_fasta_ids = [job.fileStore.writeGlobalFile(f) for f in split_fastas]
     lift_id = job.fileStore.writeGlobalFile(lift_file)
     repeat_masked = [job.addChildJobFn(repeat_masking_job, id, lift_id, opts.species, opts).rv() for id in split_fasta_ids]
-    return job.addFollowOnJobFn(concatenate_job, repeat_masked, opts).rv()
+    return job.addFollowOnJobFn(concatenate_job, input_fasta, repeat_masked, opts).rv()
 
 def convert_to_fasta(job, type, input_file, opts):
     local_file = job.fileStore.readGlobalFile(input_file)
@@ -101,7 +114,8 @@ def parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('input_sequence', help="FASTA or gzipped-FASTA file")
     parser.add_argument('species')
-    parser.add_argument('output')
+    parser.add_argument('fasta_output')
+    parser.add_argument('outfile_output')
     parser.add_argument('--engine', default='ncbi')
     parser.add_argument('--split_size', type=int, default=200000)
     parser.add_argument('--no-docker', action='store_true')
@@ -113,15 +127,16 @@ def main():
     opts = parse_args()
     with Toil(opts) as toil:
         if opts.restart:
-            result_id = toil.restart()
+            fasta_id, outfile_id = toil.restart()
         else:
             input_sequence_id = toil.importFile(makeURL(opts.input_sequence))
             if opts.input_sequence.endswith(".gz"):
                 job = Job.wrapJobFn(convert_to_fasta, "gzip", input_sequence_id, opts)
             else:
                 job = Job.wrapJobFn(split_fasta_job, input_sequence_id, opts)
-            result_id = toil.start(job)
-        toil.exportFile(result_id, makeURL(opts.output))
+            outfile_id, fasta_id = toil.start(job)
+        toil.exportFile(fasta_id, makeURL(opts.fasta_output))
+        toil.exportFile(outfile_id, makeURL(opts.outfile_output))
 
 if __name__ == '__main__':
     main()

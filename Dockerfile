@@ -27,6 +27,13 @@ RUN wget http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/faSplit -O /bin/f
 RUN chmod +x /bin/faSplit
 RUN wget http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/liftUp -O /bin/liftUp
 RUN chmod +x /bin/liftUp
+RUN wget http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/faToTwoBit -O /bin/faToTwoBit
+RUN chmod +x /bin/faToTwoBit
+RUN wget http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/twoBitMask -O /bin/twoBitMask
+RUN chmod +x /bin/twoBitMask
+RUN wget http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/twoBitToFa -O /bin/twoBitToFa
+RUN chmod +x /bin/twoBitToFa
+
 RUN apt-get install -y cpanminus
 RUN cpanm Text::Soundex
 # Copy any libraries from the user
@@ -38,7 +45,7 @@ RUN echo '\n\n\n/bin/trf\n2\n/usr/local/rmblast\n\n5\n' | perl ./configure
 
 # Create a thinner final Docker image (the previous steps add ~2GB in useless layers)
 FROM debian:stretch
-COPY --from=builder /bin/trf /bin/faSplit /bin/liftUp /bin/
+COPY --from=builder /bin/trf /bin/faSplit /bin/liftUp /bin/twoBitToFa /bin/faToTwoBit /bin/twoBitMask /bin/
 COPY --from=builder /RepeatMasker /RepeatMasker
 # Copy RMBlast
 COPY --from=builder /usr/local/rmblast /usr/local/rmblast

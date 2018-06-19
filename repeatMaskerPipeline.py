@@ -103,6 +103,19 @@ def convert_to_fasta(job, type, input_file, opts):
         raise RuntimeError("unknown compressed file type")
     return job.addChildJobFn(split_fasta_job, uncompressed_fileID, opts).rv()
 
+def launch_parallel(job, inputs, types, basenames, opts):
+    fasta_ids = []
+    outfile_ids = []
+    for input, type in zip(inputs, types):
+        if type != "fasta":
+            child_job = Job.wrapJobFn(convert_to_fasta, type, input, opts)
+        else:
+            child_job = Job.wrapJobFn(split_fasta_job, input, opts)
+        job.addChild(child_job)
+        fasta_ids.append(child_job.rv(0))
+        outfile_ids.append(child_job.rv(1))
+    return fasta_ids, outfile_ids, basenames
+
 def makeURL(path):
     if not (path.startswith("file:") or path.startswith("s3:") or path.startswith("http:") \
             or path.startswith("https:")):
@@ -112,10 +125,10 @@ def makeURL(path):
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument('input_sequence', help="FASTA or gzipped-FASTA file")
     parser.add_argument('species')
-    parser.add_argument('fasta_output')
-    parser.add_argument('outfile_output')
+    parser.add_argument('output_path')
+    parser.add_argument('input_sequences', help="FASTA or gzipped-FASTA file(s)",
+                        nargs="+")
     parser.add_argument('--engine', default='ncbi')
     parser.add_argument('--split_size', type=int, default=200000)
     parser.add_argument('--no-docker', action='store_true')
@@ -127,16 +140,28 @@ def main():
     opts = parse_args()
     with Toil(opts) as toil:
         if opts.restart:
-            fasta_id, outfile_id = toil.restart()
+            outfile_ids, fasta_ids, basenames = toil.restart()
         else:
-            input_sequence_id = toil.importFile(makeURL(opts.input_sequence))
-            if opts.input_sequence.endswith(".gz"):
-                job = Job.wrapJobFn(convert_to_fasta, "gzip", input_sequence_id, opts)
-            else:
-                job = Job.wrapJobFn(split_fasta_job, input_sequence_id, opts)
-            outfile_id, fasta_id = toil.start(job)
-        toil.exportFile(fasta_id, makeURL(opts.fasta_output))
-        toil.exportFile(outfile_id, makeURL(opts.outfile_output))
+            input_ids = []
+            input_types = []
+            input_basenames = []
+            for input_sequence in opts.input_sequences:
+                input_sequence_id = toil.importFile(makeURL(input_sequence))
+                if input_sequence.endswith(".gz") or input_sequence.endswith(".gzip"):
+                    type = "gzip"
+                else:
+                    type = "fasta"
+                input_ids.append(input_sequence_id)
+                input_types.append(type)
+
+                basename = os.path.basename(input_sequence)
+                if basename in input_basenames:
+                    raise RuntimeError("Inputs must have unique filenames.")
+                input_basenames.append(basename)
+            outfile_ids, fasta_ids, basenames = toil.start(Job.wrapJobFn(launch_parallel, input_ids, input_types, input_basenames, opts))
+        for outfile_id, fasta_id, basename in zip(outfile_ids, fasta_ids, basenames):
+            toil.exportFile(fasta_id, makeURL(os.path.join(opts.output_path, basename + '.masked')))
+            toil.exportFile(outfile_id, makeURL(os.path.join(opts.output_path, basename + '.out')))
 
 if __name__ == '__main__':
     main()

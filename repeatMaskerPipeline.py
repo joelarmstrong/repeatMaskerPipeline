@@ -15,8 +15,7 @@ def run_command(job, command, work_dir, opts):
         # Relativize paths
         new_command = [param.replace(work_dir, '/data') for param in command]
         apiDockerCall(job, opts.docker_image, new_command, working_dir='/data',
-                      volumes={work_dir: {'bind': '/data', 'mode': 'rw'}},
-                      remove=True)
+                      volumes={work_dir: {'bind': '/data', 'mode': 'rw'}})
 
 def mask_fasta_job(job, fasta_id, outfile_id, opts):
     temp_dir = job.fileStore.getLocalTempDir()

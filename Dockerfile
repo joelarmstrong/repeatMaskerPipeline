@@ -1,10 +1,8 @@
 FROM debian:stretch AS builder
 RUN apt-get update
-RUN apt-get install -y perl wget patch build-essential cpio
+RUN apt-get install -y perl wget patch build-essential cpio git
 # RepeatMasker
-RUN wget http://www.repeatmasker.org/RepeatMasker-open-4-0-7.tar.gz
-RUN tar xzvf RepeatMasker-open-4-0-7.tar.gz
-RUN rm RepeatMasker-open-4-0-7.tar.gz
+RUN git clone https://github.com/rmhubley/RepeatMasker.git
 # RMBlast
 RUN wget ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.6.0/ncbi-blast-2.6.0+-src.tar.gz
 RUN wget http://www.repeatmasker.org/isb-2.6.0+-changes-vers2.patch.gz
@@ -36,11 +34,15 @@ RUN chmod +x /bin/twoBitToFa
 
 RUN apt-get install -y cpanminus
 RUN cpanm Text::Soundex
+WORKDIR /RepeatMasker/Libraries
+# Dfam repeat library
+RUN wget http://www.dfam.org/web_download/Current_Release/Dfam.hmm.gz
+RUN gunzip Dfam.hmm.gz
 # Copy any libraries from the user
 COPY Libraries/* /RepeatMasker/Libraries/
 # Configuration
-WORKDIR /RepeatMasker
 COPY RepeatMaskerConfig.pm /RepeatMasker/
+WORKDIR /RepeatMasker
 RUN echo '\n\n\n/bin/trf\n2\n/usr/local/rmblast\n\n5\n' | perl ./configure
 
 # Create a thinner final Docker image (the previous steps add ~2GB in useless layers)

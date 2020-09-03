@@ -33,7 +33,7 @@ def mask_fasta_job(job, fasta_id, outfile_id, opts):
 
 def concatenate_job(job, fasta_id, input_ids, opts):
     output = os.path.join(job.fileStore.getLocalTempDir(), 'rm.out')
-    input_paths = map(job.fileStore.readGlobalFile, input_ids)
+    input_paths = list(map(job.fileStore.readGlobalFile, input_ids))
     with open(output, 'w') as outfile:
         # Write headers
         outfile.write("""   SW   perc perc perc  query                    position in query     matching       repeat              position in repeat
